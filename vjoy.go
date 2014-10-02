@@ -48,7 +48,7 @@ func ResetAll() error {
 	return ErrReset
 }
 
-type AxisName int
+type AxisName uint
 
 const (
 	AxisX AxisName = iota
@@ -60,6 +60,8 @@ const (
 	Slider0
 	Slider1
 	MaxAxis
+
+	MaxButton = 128
 )
 
 func axisNumber(a AxisName) uint {
@@ -195,7 +197,8 @@ func (h *discreteHat) Exists() bool {
 
 func (h *discreteHat) SetDiscrete(val HatState) {
 	mask := uint32(0xf) << h.shift
-	*(h.p) = (*(h.p) & mask) | (uint32(val) << h.shift)
+	vsh := (uint32(val) & 0xf) << h.shift
+	*(h.p) = (*(h.p) & ^mask) | vsh
 }
 
 func (h *discreteHat) SetDegp(val int) {
@@ -270,15 +273,15 @@ func (d *Device) Reset() {
 // cached values for this device, to be submitted
 // by Update()
 func (d *Device) Axis(n AxisName) *Axis {
-	if 0 <= n && int(n) < len(d.axes) {
+	if int(n) < len(d.axes) {
 		return d.axes[n]
 	}
 	return d.invalidaxis
 }
 
 // return Button number n
-func (d *Device) Button(n int) *Button {
-	if 0 <= n && n < len(d.buttons) {
+func (d *Device) Button(n uint) *Button {
+	if int(n) < len(d.buttons) {
 		return d.buttons[n]
 	}
 	return d.invalidbutton
@@ -286,16 +289,16 @@ func (d *Device) Button(n int) *Button {
 
 // return Hat number n
 // hats aren't yet supported by vjoy
-func (d *Device) not_yet_suppoerted_Hat(n int) Hat {
+func (d *Device) Hat(n int) Hat {
 	if 0 <= n && n < len(d.hats) {
 		return d.hats[n]
 	}
 	return d.invalidhat
 }
 
-func (d *Device) Axes() []*Axis                  { return d.axes }
-func (d *Device) Buttons() []*Button             { return d.buttons }
-func (d *Device) not_yet_suppoerted_Hats() []Hat { return d.hats }
+func (d *Device) Axes() []*Axis      { return d.axes }
+func (d *Device) Buttons() []*Button { return d.buttons }
+func (d *Device) Hats() []Hat        { return d.hats }
 
 // Update VJD with values changed with in
 // Button, Hat and Axis objects.
@@ -372,7 +375,7 @@ func (d *Device) init() error {
 
 	n = dll.GetVJDDiscPovNumber(d.rid)
 	for i := 0; i < n; i++ {
-		p, shift := d.hat(i)
+		p, shift := d.dhat(i)
 		if p != nil {
 			d.hats = append(d.hats, &discreteHat{p: p, exists: true, shift: shift})
 		}
@@ -380,7 +383,7 @@ func (d *Device) init() error {
 
 	n = dll.GetVJDContPovNumber(d.rid)
 	for i := 0; i < n; i++ {
-		p, shift := d.hat(i)
+		p, shift := d.chat(i)
 		if p != nil {
 			d.hats = append(d.hats, &continuousHat{p: p, exists: true, shift: shift})
 		}
@@ -404,7 +407,13 @@ func (d *Device) button(i int) (p *int32, mask int32) {
 	return
 }
 
-func (d *Device) hat(i int) (p *uint32, shift uint) {
+func (d *Device) dhat(i int) (p *uint32, shift uint) {
+	p = &d.st.Hats
+	shift = uint(i) * 4
+	return
+}
+
+func (d *Device) chat(i int) (p *uint32, shift uint) {
 	shift = uint(i%2) * 16
 	switch i / 2 {
 	case 0:
